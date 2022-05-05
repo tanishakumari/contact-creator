@@ -1,0 +1,161 @@
+Superbadge
+---------------
+contactCreator.Html
+-------------------------
+<template>
+    <lightning-card>
+        <lightning-record-form
+            object-api-name={objectApiName}
+            fields={fields}
+            
+            onsuccess={handleSuccess}>
+        </lightning-record-form>
+    </lightning-card>
+</template>
+--------------------------
+contactCreator.js
+-----------------
+import { LightningElement } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import CONTACT_OBJECT from '@salesforce/schema/Contact';
+import FirstName from '@salesforce/schema/Contact.FirstName';
+import LastName from '@salesforce/schema/Contact.LastName';
+import Email from '@salesforce/schema/Contact.Email';
+export default class AccountCreator extends LightningElement {
+    objectApiName = CONTACT_OBJECT;
+    fields = [FirstName, LastName, Email];
+    handleSuccess(event) {
+        const toastEvent = new ShowToastEvent({
+            title: "Contact created",
+            message: "Record ID: " + event.detail.id,
+            variant: "success"
+        });
+        this.dispatchEvent(toastEvent);
+    }
+}
+------------------------------------------------------
+.xml
+------------------
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>48.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__AppPage</target>
+    </targets>
+</LightningComponentBundle>
+--------------------------------------------------
+ContactList.html
+-----------------
+<template>
+    <lightning-card>
+        <template if:true={contacts.data}>
+            <lightning-datatable
+                key-field="Id"
+                data={contacts.data}
+                columns={columns}
+            >
+           </lightning-datatable>
+        </template>
+        <template if:true={errors}>
+            <p>errors</p>
+        </template>
+    </lightning-card>
+</template>
+---------------------------------
+contactList.js
+-----------------
+import { LightningElement, wire } from 'lwc';
+import { reduceErrors } from 'c/ldsUtils';
+import FirstName from '@salesforce/schema/Contact.FirstName';
+import LastName from '@salesforce/schema/Contact.LastName';
+import Email from '@salesforce/schema/Contact.Email';
+import getContacts from '@salesforce/apex/ContactController.getContacts';
+const COLUMNS = [
+    { label: 'FirstName ', fieldName: FirstName .fieldApiName, type: 'text' },
+    { label: 'LastName ', fieldName: LastName .fieldApiName, type: 'text' },
+    { label: 'Email ', fieldName: Email .fieldApiName, type: 'Email' }
+];
+export default class ContactList extends LightningElement {
+    columns = COLUMNS;
+    @wire(getContacts)
+    contacts;
+    get errors() {
+        return (this.contacts.error) ?
+        reduceErrors(this.contacts.error) : [];
+    }
+}
+-----------------------------------------------------------------
+.xml
+------------------
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>48.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__AppPage</target>
+    </targets>
+</LightningComponentBundle>
+--------------------------------------------
+ldsUtils.js
+------------
+/**
+ * Reduces one or more LDS errors into a string[] of error messages.
+ * @param {FetchResponse|FetchResponse[]} errors
+ * @return {String[]} Error messages
+ */
+ export function reduceErrors(errors) {
+    if (!Array.isArray(errors)) {
+        errors = [errors];
+    }
+
+    return (
+        errors
+            // Remove null/undefined items
+            .filter((error) => !!error)
+            // Extract an error message
+            .map((error) => {
+                // UI API read errors
+                if (Array.isArray(error.body)) {
+                    return error.body.map((e) => e.message);
+                }
+                // UI API DML, Apex and network errors
+                else if (error.body && typeof error.body.message === 'string') {
+                    return error.body.message;
+                }
+                // JS errors
+                else if (typeof error.message === 'string') {
+                    return error.message;
+                }
+                // Unknown error shape so try HTTP status text
+                return error.statusText;
+            })
+            // Flatten
+            .reduce((prev, curr) => prev.concat(curr), [])
+            // Remove empty strings
+            .filter((message) => !!message)
+    );
+}   
+---------------------------------------------------------
+.xml
+-----------
+<?xml version="1.0" encoding="UTF-8" ?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>52.0</apiVersion>
+    <isExposed>false</isExposed>
+</LightningComponentBundle>
+--------------------------------------------------
+class for the ContactCreator
+--------------------------
+public with sharing class ContactController {
+    @AuraEnabled(cacheable=true)
+    public static List<Contact> getContacts() {
+        throw new AuraHandledException('forced error');
+       // return [
+         //   SELECT FirstName, LastName, Email FROM Contact
+          //  WITH SECURITY_ENFORCED
+          //  ORDER BY LastName
+       // ];
+    }
+}
+-----------------------------------------
